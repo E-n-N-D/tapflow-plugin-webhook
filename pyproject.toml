@@ -1,0 +1,18 @@
+# Tooling only: the Plugin itself is the webhook/ folder, packed with `tapflow plugin pack webhook`.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The Plugin's entry module, and conftest's helpers. tapflow_plugin comes from
+# `pip install tapflow-plugin`, or from a TapFlow checkout's desktop/plugin_sdk on PYTHONPATH.
+pythonpath = ["webhook", "tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "A"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]

@@ -1,0 +1,59 @@
+api_version = 1
+id = "tapflow.webhook"
+name = "Webhook"
+author = "TapFlow"
+version = "1.0.0"
+platforms = ["win32"]
+entry = "tapflow_webhook"
+
+[[kinds]]
+name = "send"
+label = "Send Webhook"
+summary = "Send an HTTP request to a URL."
+icon = "web"
+
+[[kinds.params]]
+name = "url"
+label = "URL"
+type = "text"
+max_length = 2000
+
+[[kinds.params]]
+name = "method"
+label = "Method"
+type = "choice"
+default = "POST"
+choices = [
+    { value = "GET", label = "GET" },
+    { value = "POST", label = "POST" },
+    { value = "PUT", label = "PUT" },
+    { value = "PATCH", label = "PATCH" },
+    { value = "DELETE", label = "DELETE" },
+]
+
+[[kinds.params]]
+name = "body"
+label = "Body"
+type = "multiline_text"
+default = ""
+
+[[kinds.params]]
+name = "content_type"
+label = "Content type"
+type = "text"
+default = "application/json"
+max_length = 200
+
+[[kinds.params]]
+name = "fail_on_error"
+label = "Fail on an error status"
+type = "bool"
+default = true
+
+[[kinds.params]]
+name = "timeout_s"
+label = "Timeout (seconds)"
+type = "number"
+default = 30
+min = 1
+max = 300

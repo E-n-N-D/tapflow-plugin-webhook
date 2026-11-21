@@ -1,0 +1,120 @@
+name: CI
+
+# Lints and tests the Plugin and packs it into its .tapflow-plugin file, on every push and pull
+# request. A tag v<version> also publishes a GitHub release with the file attached: the tag
+# must name the version in webhook/tapflow-plugin.toml.
+#
+# The SDK (tapflow_plugin) and `tapflow plugin pack` come from TapFlow's own source, at the
+# commit TAPFLOW_REF. TapFlow's repository is private, so it's checked out with the secret
+# TAPFLOW_REPO_TOKEN: a fine-grained token with read-only Contents access to E-n-N-D/TapFlow.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  # A TapFlow commit whose Plugin SDK and `tapflow plugin pack` speak the Plugin API version
+  # the manifest names.
+  TAPFLOW_REF: f9cfe5baeee0c12b2d58038bafc122c81a2d92ba
+
+jobs:
+  build:
+    name: Lint, test & pack
+    # The Plugin runs on Windows only, as TapFlow's Desktop Agent does.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out TapFlow
+        uses: actions/checkout@v4
+        with:
+          repository: E-n-N-D/TapFlow
+          ref: ${{ env.TAPFLOW_REF }}
+          token: ${{ secrets.TAPFLOW_REPO_TOKEN }}
+          path: tapflow
+          sparse-checkout: desktop
+
+      - uses: actions/setup-python@v5
+        with:
+          # The Desktop Agent's bundled Python, which the Plugin runs on
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tapflow/desktop/requirements.txt
+
+      # The agent's own dependencies, which `tapflow plugin pack` imports, and its pinned
+      # pytest, ruff and black.
+      - name: Install dependencies
+        run: pip install -r tapflow/desktop/requirements.txt
+
+      - name: Lint
+        run: |
+          ruff check webhook tests
+          black --check webhook tests
+
+      - name: Type check
+        env:
+          MYPYPATH: tapflow/desktop/plugin_sdk
+        run: mypy --strict webhook/tapflow_webhook.py
+
+      - name: Test
+        env:
+          PYTHONPATH: tapflow/desktop/plugin_sdk
+        run: pytest -v --tb=short
+
+      - name: Pack
+        env:
+          PYTHONPATH: tapflow/desktop
+        run: python -m tapflow_agent.cli plugin pack webhook --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tapflow-plugin
+          path: dist/*.tapflow-plugin
+          if-no-files-found: error
+
+  release:
+    name: Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag is the manifest's version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(python3 -c "import tomllib; print(tomllib.load(open('webhook/tapflow-plugin.toml', 'rb'))['version'])")
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::The tag $TAG isn't v$version, the version in webhook/tapflow-plugin.toml"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tapflow-plugin
+          path: dist/
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "$TAG" dist/*.tapflow-plugin \
+            --title "Webhook $VERSION" \
+            --notes "Install the attached .tapflow-plugin file from the TapFlow window's Plugins page (Install from file), or with \`tapflow plugin install\`. See the README for each param."
